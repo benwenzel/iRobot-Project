@@ -5,6 +5,19 @@ import numpy as np
 import cv2
 import os
 
+# A helper function that tries to detect the OS and return the appropriate port path
+def getPortPath():
+	osName = os.name
+	if (osName == "posix"):
+		portPath = "/dev/tty.KeySerial1"
+	elif (osName == "Linux"):
+		portPath = "/dev/ttyUSB0"
+	elif (osName == "Windows"):
+		portPath = "COM3" #see https://piazza.com/class/ijdbjj478bi10j?cid=273
+	else:
+		raise Exception("Could not determine your OS.")
+	return portPath
+
 # The speed at which the robot moves, in centimeters per second
 ROBOT_SPEED = 20
 
@@ -20,9 +33,25 @@ cap = cv2.VideoCapture(0)
 # Run the robot's logic loop
 patrol = True
 while (patrol):
+
+	##### ROBOT LOGIC #####
 	# Poll sensor values
 	sensors = robot.sensors([create.LEFT_BUMP, create.RIGHT_BUMP])
+	# If either of the bumpers is depressed, stop patrolling
+	if (sensors[create.LEFT_BUMP] == 1 or sensors[create.RIGHT_BUMP] == 1):
+		robot.stop()
+		#back up
+		robot.go(-ROBOT_SPEED,0)
+		#pause the loop to let the robot back up a bit
+		time.sleep(0.1)
+		robot.stop()
+		robot.turn(180, 100)
+		robot.go(ROBOT_SPEED,0)
+	else:
+		robot.go(ROBOT_SPEED,0)
 
+
+	###### OPENCV LOGIC ######
 	# Capture a single frame from the videostream
 	frame = cap.read()[1]
 	# Convert the BGR (Blue, Green, Red) colorspace to HSV (Hue, Saturation, Value/Brightness)
@@ -36,39 +65,11 @@ while (patrol):
 	res = cv2.bitwise_and(hsv, hsv, mask=mask)
 	# Threshhold the image so that all non-target color values are black and all
 	# target color values are white
-	rest = cv2.threshold(res, 0, 255, cv2.THRESH_BINARY)[1]
-	
-
-	
-	# If either of the bumpers is depressed, stop patrolling
-	if (sensors[create.LEFT_BUMP] == 1 or sensors[create.RIGHT_BUMP] == 1):
-		robot.stop()
-		#back up
-		robot.go(-ROBOT_SPEED,0)
-		#pause the loop to let the robot back up a bit
-		time.sleep(0.1)
-		robot.stop()
-		robot.turn(180, 100)
-		robot.go(ROBOT_SPEED,0)
-	else:
-		robot.go(ROBOT_SPEED,0)
+	rest = cv2.threshold(res, 0, 255, cv2.THRESH_BINARY)[1]	
 		
 # Release the OpenCV video capture
 cap.release()
 
-
-# A helper function that tries to detect the OS and return the appropriate port path
-def getPortPath():
-	osName = os.name
-	if (osName == "posix"):
-		portPath = "/dev/tty.KeySerial1"
-	elif (osName == "Linux"):
-		portPath = "/dev/ttyUSB0"
-	elif (osName == "Windows"):
-		portPath = "COM3" #see https://piazza.com/class/ijdbjj478bi10j?cid=273
-	else:
-		raise Exception("Could not determine your OS.")
-	return portPath
 
 
 
