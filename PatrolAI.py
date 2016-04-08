@@ -5,8 +5,10 @@ import numpy as np
 import cv2
 import os
 
+# The speed at which the robot moves, in centimeters per second
+ROBOT_SPEED = 20
 
-#get the port path/name string
+# Get the port path/name string
 portPath = getPortPath()
 
 # Initialize the robot
@@ -23,7 +25,7 @@ while (patrol):
 
 	# Capture a single frame from the videostream
 	frame = cap.read()[1]
-	# Convert BGR (Blue, Green, Red) to HSV (Hue, Saturation, Value/Brightness)
+	# Convert the BGR (Blue, Green, Red) colorspace to HSV (Hue, Saturation, Value/Brightness)
 	hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 	# Define upper and lower bounds in HSV colorspace for the color detection
 	lower_blue = np.array([90,100,50])
@@ -42,13 +44,14 @@ while (patrol):
 	if (sensors[create.LEFT_BUMP] == 1 or sensors[create.RIGHT_BUMP] == 1):
 		robot.stop()
 		#back up
-		robot.go(-10,0)
+		robot.go(-ROBOT_SPEED,0)
 		#pause the loop to let the robot back up a bit
-		time.sleep(0.2)
+		time.sleep(0.1)
 		robot.stop()
 		robot.turn(180, 100)
+		robot.go(ROBOT_SPEED,0)
 	else:
-		robot.go(20,0)
+		robot.go(ROBOT_SPEED,0)
 		
 # Release the OpenCV video capture
 cap.release()
