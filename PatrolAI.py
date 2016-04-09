@@ -5,7 +5,11 @@ import numpy as np
 import cv2
 import os
 
+<<<<<<< HEAD
 # A helper function that attempts to detect the OS and return the appropriate port path
+=======
+# A helper function that tries to detect the OS and return the appropriate port path
+>>>>>>> a7625b3dc629cc8fa6b0fb11c15f3b592b20fcd3
 def getPortPath():
 	osName = os.name
 	if (osName == "posix"):
@@ -34,9 +38,14 @@ frame_count = 0
 # Run the robot's logic loop
 patrol = True
 while (patrol):
+<<<<<<< HEAD
 	
 	##### ROBOT LOGIC #####
 	
+=======
+
+	##### ROBOT LOGIC #####
+>>>>>>> a7625b3dc629cc8fa6b0fb11c15f3b592b20fcd3
 	# Poll sensor values
 	sensors = robot.sensors([create.LEFT_BUMP, create.RIGHT_BUMP])
 	# If either of the bumpers is depressed, stop patrolling
@@ -51,6 +60,7 @@ while (patrol):
 		robot.go(ROBOT_SPEED,0)
 	else:
 		robot.go(ROBOT_SPEED,0)
+<<<<<<< HEAD
 	
 	
 	###### OPENCV LOGIC ######
@@ -135,6 +145,27 @@ while (patrol):
 
 # The logic loop is done, stop the robot and release the capture
 robot.stop()
+=======
+
+
+	###### OPENCV LOGIC ######
+	# Capture a single frame from the videostream
+	frame = cap.read()[1]
+	# Convert the BGR (Blue, Green, Red) colorspace to HSV (Hue, Saturation, Value/Brightness)
+	hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+	# Define upper and lower bounds in HSV colorspace for the color detection
+	lower_blue = np.array([90,100,50])
+	upper_blue = np.array([130,255,255])
+	# Create the mask to block all colors except the target color
+	mask = cv2.inRange(hsv, lower_blue, upper_blue)
+	# Apply the mask
+	res = cv2.bitwise_and(hsv, hsv, mask=mask)
+	# Threshhold the image so that all non-target color values are black and all
+	# target color values are white
+	rest = cv2.threshold(res, 0, 255, cv2.THRESH_BINARY)[1]	
+		
+# Release the OpenCV video capture
+>>>>>>> a7625b3dc629cc8fa6b0fb11c15f3b592b20fcd3
 cap.release()
 cv2.destroyAllWindows()
 
@@ -144,7 +175,10 @@ cv2.destroyAllWindows()
 
 
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> a7625b3dc629cc8fa6b0fb11c15f3b592b20fcd3
 
 
 
