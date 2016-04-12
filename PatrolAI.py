@@ -4,6 +4,17 @@ import pygame
 import numpy as np
 import cv2
 import os
+import argparse
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--source", type=int, help="specifies the camera that is the source of the video feed")
+args = parser.parse_args()
+
+camCode = 0
+if (args.source == 1):
+	camCode = 1;	#external webcam
+
 
 # A helper function that attempts to detect the OS and return the appropriate port path
 def getPortPath():
@@ -28,7 +39,7 @@ portPath = getPortPath()
 robot = create.Create(portPath)
 
 # The videostream used by OpenCV
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(camCode)
 
 frame_count = 0
 # Run the robot's logic loop
@@ -45,12 +56,9 @@ while (patrol):
 		#back up
 		robot.go(-ROBOT_SPEED,0)
 		#pause the loop to let the robot back up a bit
-		time.sleep(0.1)
 		robot.stop()
 		robot.turn(180, 100)
-		robot.go(ROBOT_SPEED,0)
-	else:
-		robot.go(ROBOT_SPEED,0)
+		robot.go(ROBOT_SPEED, 0)
 	
 	
 	###### OPENCV LOGIC ######
@@ -101,7 +109,7 @@ while (patrol):
 			del contours[0]
 		
 		# Now that we've culled the noise and (hopefully) isolated the node, detect the node's orientation
-		if (len(contours)>0):
+		if (len(contours) > 0):
 			
 			# Get the x,y coordinates of the bounding rect, as well as its width and height
 			x,y,w,h = cv2.boundingRect(contours[0])
@@ -120,16 +128,21 @@ while (patrol):
 			right_difference = img_width - node_right
 			if (left_difference+sensitivity < right_difference):
 				print("\tSkewed to the left")
-				robot.go(ROBOT_SPEED,30)
-			if (left_difference-sensitivity > right_difference):
+				robot.go(ROBOT_SPEED, 10)
+			elif (left_difference-sensitivity > right_difference):
 				print("\tSkewed to the right")
-				robot.go(ROBOT_SPEED,-30)
+				robot.go(ROBOT_SPEED, -10)
+			else:
+				robot.go(ROBOT_SPEED, 0)
+			# Draw the bounding box of the contour
+			cv2.rectangle(frame,(x,y),(x+w,y+h),(0,255,0),1)
+	time.sleep(0.05)
 
-# Draw the computed contours to the image
-cv2.drawContours(frame,contours,-1,(255,255,255),-1)
+	# Draw the computed contours to the image
+	cv2.drawContours(frame,contours,-1, (255, 255, 255), -1)
 	
 	# Display the resulting frame
-	cv2.imshow('Window',frame)
+	cv2.imshow('Window', frame)
 	if (cv2.waitKey(1) & 0xFF == ord('q')):
 		break
 
