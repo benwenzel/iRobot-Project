@@ -6,17 +6,11 @@ import cv2
 import os
 import argparse
 
+# Python enum emulation for colors
+class Color:
+	Blue, Red, Green, Yellow = range(4)
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--source", type=int, help="specifies the camera that is the source of the video feed")
-args = parser.parse_args()
-
-camCode = 0
-if (args.source == 1):
-	camCode = 1;	#external webcam
-
-
-# A helper function that attempts to detect the OS and return the appropriate port path
+# A helper function that attempts to detect the OS and return the appropriate serial port path
 def getPortPath():
 	osName = os.name
 	if (osName == "posix"):
@@ -29,57 +23,107 @@ def getPortPath():
 		raise Exception("Could not determine your OS.")
 	return portPath
 
-# The speed at which the robot moves, in centimeters per second
-ROBOT_SPEED = 10
+# Get commandline arguments
+parser = argparse.ArgumentParser()
+parser.add_argument("--source", type=int, help="specifies the camera that is the source of the video feed")
+args = parser.parse_args()
 
-# Get the port path/name string
+# The camcode tells us what device to use: 0 for the built-in webcam, 1 for the external webcam
+camCode = 0
+if (args.source == 1):
+	camCode = 1
+
+# Get the serial port path/name string
 portPath = getPortPath()
 
 # Initialize the robot
 robot = create.Create(portPath)
 
+# The speed at which the robot moves, in centimeters per second
+ROBOT_SPEED = 30
+
+
+# Define the HSV color ranges for blue, red, and green for color detection
+
+# Define HSV range for blue
+lower_blue = np.array([90,80,80])
+upper_blue = np.array([130,255,255])
+
+# Define the HSV range for green
+lower_green = np.array([46,80,50])
+upper_green = np.array([92,255,255])
+
+# Define the HSV range for yellow
+lower_yellow = np.array([31,80,50])
+upper_yellow = np.array([45,255,255])
+
+# Define the HSV color range for red--this is a special case, because red exists at both the
+# upper and lower ends of the HSV hue spectrum, so we have to combine two ranges
+# The red range at the lower end of the spectrum
+lower_red1 = np.array([0,150,100])
+upper_red1 = np.array([10,255,255])
+# The red range at the upper end of the spectrum
+lower_red2 = np.array([160,150,100])
+upper_red2 = np.array([200,255,255])
+
+#set the initial color that the robot will search for when it begins its patrol path
+target_color = Color.Blue
+
 # The videostream used by OpenCV
 cap = cv2.VideoCapture(camCode)
-
 frame_count = 0
+
 # Run the robot's logic loop
 patrol = True
 while (patrol):
-	
-	##### ROBOT LOGIC #####
-	
+	frame_count += 1
+	print("=== FRAME " + str(frame_count) + " ===")
+	if (target_color == Color.Blue):
+			print("Target Color: Blue")
+	elif(target_color == Color.Green):
+			print("Target Color: Green")
+
 	# Poll sensor values
 	sensors = robot.sensors([create.LEFT_BUMP, create.RIGHT_BUMP])
-	# If either of the bumpers is depressed, stop patrolling
+	# If either of the bumpers is depressed, the node has been hit
 	if (sensors[create.LEFT_BUMP] == 1 or sensors[create.RIGHT_BUMP] == 1):
+		# TODO: robot.resetPose(), spin around until you find the angle where
+		# the largest contour is visible, remember that angle, then once you've completed
+		# the 360 degree revolution, spin to that stored angle and target the node (which
+		# would have to be of a certain base area size, probably around 200 pixels or so)
 		robot.stop()
-		#back up
 		robot.go(-ROBOT_SPEED,0)
-		#pause the loop to let the robot back up a bit
 		robot.stop()
 		robot.turn(180, 100)
 		robot.go(ROBOT_SPEED, 0)
-	
-	
-	###### OPENCV LOGIC ######
+		# Change the color of the target node so it moves to the opposite one
+		if (target_color == Color.Green):
+			target_color = Color.Blue
+		elif (target_color == Color.Blue):
+			target_color = Color.Green
 	
 	# Capture frame-by-frame
 	frame = cap.read()[1]
 	frame_count += 1
 	print("=== FRAME " + str(frame_count) + " ===")
 	
-	# Remove noise in order to get cleaner contours later on
-	frame = cv2.GaussianBlur(frame, (9,9), 0)
+	# Remove noise in order to get cleaner contours
+	denoised_image = cv2.GaussianBlur(frame, (9,9), 0)
 	
-	# Convert BGR to HSV (Hue, Saturation, Value/Brightness) for threshholding
-	hsv_image = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+	# Convert the frame from BGR to HSV (Hue, Saturation, Value/Brightness) for threshholding
+	hsv_image = cv2.cvtColor(denoised_image, cv2.COLOR_BGR2HSV)
 	
-	# Define upper and lower bounds in HSV colorspace for the color detection
-	lower_blue = np.array([90,80,50])
-	upper_blue = np.array([130,255,255])
-	
-	# Create the mask to remove all non-target colors
-	mask = cv2.inRange(hsv_image, lower_blue, upper_blue)
+	# Create the color-specific mask to remove all non-target colors
+	if (target_color == Color.Blue):
+		mask = cv2.inRange(hsv_image, lower_blue, upper_blue)
+	elif (target_color == Color.Green):
+		mask = cv2.inRange(hsv_image, lower_green, upper_green)
+	elif (target_color == Color.Yellow):
+		mask = cv2.inRange(hsv_image, lower_yellow, upper_yellow)
+	elif (target_color == Color.Red):
+		mask_lower = cv2.inRange(hsv_image, lower_red1, upper_red1)
+		mask_upper = cv2.inRange(hsv_image, lower_red2, upper_red2)
+		mask = mask_lower + mask_upper
 	# Apply the mask
 	masked_image = cv2.bitwise_and(frame, frame, mask=mask)
 	
@@ -120,7 +164,7 @@ while (patrol):
 			
 			# The amount (in pixels) that the contour can shift to the left or right without being considered
 			# off-center
-			sensitivity = 150
+			sensitivity = 100
 			
 			# Calculate any adjustments in the robot's direction by comparing the respective differences between
 			# the left side of the contour bounding rect and the
@@ -136,7 +180,6 @@ while (patrol):
 				robot.go(ROBOT_SPEED, 0)
 			# Draw the bounding box of the contour
 			cv2.rectangle(frame,(x,y),(x+w,y+h),(0,255,0),1)
-	time.sleep(0.05)
 
 	# Draw the computed contours to the image
 	cv2.drawContours(frame,contours,-1, (255, 255, 255), -1)
@@ -145,6 +188,10 @@ while (patrol):
 	cv2.imshow('Window', frame)
 	if (cv2.waitKey(1) & 0xFF == ord('q')):
 		break
+
+	# Limit the frame/loop rate by sleeping a little at the end of each frame
+	time.sleep(0.03)
+# End of loop
 
 # The logic loop is done, stop the robot and release the capture
 robot.stop()
