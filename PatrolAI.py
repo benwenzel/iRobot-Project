@@ -1,10 +1,27 @@
 import create
-import utilities as ut
 import time
 import pygame
 import numpy as np
 import cv2
 import argparse
+import os
+
+# Python enum emulation for colors
+class Color:
+	Blue, Red, Green, Yellow = range(4)
+
+# A helper function that attempts to detect the OS and return the appropriate serial port path
+def getPortPath():
+	osName = os.name
+	if (osName == "posix"):
+		portPath = "/dev/tty.KeySerial1"
+	elif (osName == "Linux"):
+		portPath = "/dev/ttyUSB0"
+	elif (osName == "Windows"):
+		portPath = "COM3" #see https://piazza.com/class/ijdbjj478bi10j?cid=273
+	else:
+		raise Exception("Could not determine your OS.")
+	return portPath
 
 
 # Get commandline arguments
@@ -18,13 +35,13 @@ if (args.source == 1):
 	camCode = 1
 
 # Get the serial port path/name string
-portPath = ut.getPortPath()
+portPath = getPortPath()
 
 # Initialize the robot
 robot = create.Create(portPath)
 
 # The speed at which the robot moves, in centimeters per second
-ROBOT_SPEED = 10
+ROBOT_SPEED = 30
 
 
 # Define the HSV color ranges for blue, red, and green for color detection
@@ -34,11 +51,11 @@ lower_blue = np.array([90,80,80])
 upper_blue = np.array([130,255,255])
 
 # Define the HSV range for green
-lower_green = np.array([46,80,50])
-upper_green = np.array([92,255,255])
+lower_green = np.array([46,80,80])
+upper_green = np.array([86,255,255])
 
 # Define the HSV range for yellow
-lower_yellow = np.array([31,80,50])
+lower_yellow = np.array([31,80,80])
 upper_yellow = np.array([45,255,255])
 
 # Define the HSV color range for red--this is a special case, because red exists at both the
@@ -127,8 +144,11 @@ target_color = Color.Blue
 cap = cv2.VideoCapture(camCode)
 frame_count = 0
 
+SIZE_NODES = 500
+SIZE_ENEMY = 500
+
 # Run the robot's logic loop
-mode = "moveToNode" #, "findNode", "attack"
+mode = "findNode" #, "findNode", "attack"
 loop = True
 while (loop):
 	# Capture frame-by-frame
@@ -162,37 +182,45 @@ while (loop):
 				target_color = Color.Green
 			mode = "findNode"
 			continue
-		#mode = "findNode"
-		# Do other stuff
-		enemies = findContours(frame, enemy_color, 150)
+		# Find enemies
+		enemies = findContours(frame, enemy_color, SIZE_ENEMY)
 		if (len(enemies) > 0):
 			print("ENEMY IN SIGHT")
 			mode = "attack"
 		else:
-			contours = findContours(frame, target_color, 100)
+			contours = findContours(frame, target_color, SIZE_NODES)
 			# Detect the node's orientation
 			if (len(contours) > 0):
 				alignment = contourAlignment(contours[0], 100, frame)
 				if (alignment == "left"):
 					print("\tSkewed to the left")
-					robot.go(ROBOT_SPEED, 15)
+					robot.go(ROBOT_SPEED, 25)
 				elif (alignment == "right"):
 					print("\tSkewed to the right")
-					robot.go(ROBOT_SPEED, -15)
+					robot.go(ROBOT_SPEED, -25)
 				else:
 					robot.go(ROBOT_SPEED, 0)
-
+			else:
+				mode = "findNode"
+				continue
 			# Draw the computed contours to the image
 			cv2.drawContours(frame, contours, -1, (255, 255, 255), -1)
 			
 	elif (mode == "findNode"):
 		print("Mode: findNode");
 		robot.resetPose()
-		robot.turn(36,720)
-		contours = findContours(frame, target_color, 100)
+		robot.turn(15,720)
+		# Check for enemies
+		enemies = findContours(frame, enemy_color, SIZE_ENEMY)
+		if (len(enemies) > 0):
+			mode = "attack"
+			continue
+		contours = findContours(frame, target_color, SIZE_NODES)
 		if (len(contours) > 0):
+			robot.stop();
+			#robot.playSong([(59,8),(68,8),(0,10),(59,8),(68,50)])
 			mode = "moveToNode"
-			continue;
+			continue
 		# Rotate in place, looking for a color
 		# TODO: robot.resetPose(), spin around until you find the angle where
 		# the largest contour is visible, remember that angle, then once you've completed
@@ -200,6 +228,12 @@ while (loop):
 		# would have to be of a certain base area size, probably around 200 pixels or so)
 		
 	elif (mode == "attack"):
+		# Jaws themesong, in robot beeps
+		robot.playSong([(35,50),(36,25),(0,50),
+						(35,50),(36,25),(0,50),
+						(35,40),(36,20),(0,13),
+						(35,30),(36,17),(0,12),
+						(35,28),(36,14),(0,12)])
 		print("Mode: attack")
 		# If either of the bumpers is depressed, the node has been hit
 		if (sensors[create.LEFT_BUMP] == 1 or sensors[create.RIGHT_BUMP] == 1):
@@ -208,23 +242,26 @@ while (loop):
 			robot.stop()
 			robot.go(-ROBOT_SPEED,0)
 			robot.stop()
-			target_color = last_node_color
+			# Stop the Jaws song
+			robot.playSong([(0,0)])
 			mode = "findNode"
 			continue
 		# Do other stuff
-		enemies = findContours(frame, enemy_color, 150)
+		enemies = findContours(frame, enemy_color, SIZE_ENEMY)
 		if (len(enemies) > 0):
 			print("ENEMY IN SIGHT")
 			alignment = contourAlignment(enemies[0], 100, frame)
 			if (alignment == "left"):
 				print("\tSkewed to the left")
-				robot.go(ROBOT_SPEED, 15)
+				robot.go(ROBOT_SPEED, 25)
 			elif (alignment == "right"):
 				print("\tSkewed to the right")
-				robot.go(ROBOT_SPEED, -15)
+				robot.go(ROBOT_SPEED, -25)
 			else:
 				robot.go(ROBOT_SPEED, 0)
 		else:
+			# Stop the Jaws song
+			robot.playSong([(0,0)])
 			mode = "findNode"
 			continue
 
@@ -232,7 +269,7 @@ while (loop):
 		cv2.drawContours(frame, enemies, -1, (255, 255, 255), -1)
 	
 	# Display the resulting frame
-	cv2.imshow('Window', frame)
+	#cv2.imshow('Window', frame)
 	if (cv2.waitKey(1) & 0xFF == ord('q')):
 		loop = False
 
